@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin of the barbershop
+    function isAdmin(barbershopId) {
+      return isAuthenticated() && 
+             request.auth.token.barbershopId == barbershopId;
+    }
+    
+    // Barbershops collection - only admins can create/modify
+    match /barbershops/{barbershopId} {
+      allow read: if true; // Public can read barbershop info
+      allow write: if isAdmin(barbershopId);
+      
+      // Services subcollection
+      match /services/{serviceId} {
+        allow read: if true; // Public needs to see services for booking
+        allow create, update, delete: if isAdmin(barbershopId);
+      }
+      
+      // Barbers subcollection
+      match /barbers/{barberId} {
+        allow read: if true; // Public needs to see barbers for booking
+        allow create, update, delete: if isAdmin(barbershopId);
+      }
+      
+      // Customers subcollection
+      match /customers/{customerId} {
+        allow read: if isAdmin(barbershopId);
+        allow create: if true; // Allow public to create customer during booking
+        allow update, delete: if isAdmin(barbershopId);
+      }
+      
+      // Appointments subcollection
+      match /appointments/{appointmentId} {
+        allow read: if isAdmin(barbershopId);
+        allow create: if true; // Allow public to create appointments
+        allow update, delete: if isAdmin(barbershopId);
+      }
+    }
+  }
+}

@@ -1,12 +1,12 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { useBarbershop } from './BarbershopContext'
 import {
-    services as initialServices,
-    barbers as initialBarbers,
-    customers as initialCustomers,
-    appointments as initialAppointments,
-    loyaltyConfig,
-    statistics as initialStatistics,
-} from '../data/mockData'
+    servicesService,
+    barbersService,
+    customersService,
+    appointmentsService
+} from '../services/firebaseService'
+import { loyaltyConfig } from '../data/mockData' // Keep loyalty config as constant
 
 const AppContext = createContext()
 
@@ -19,122 +19,284 @@ export const useApp = () => {
 }
 
 export const AppProvider = ({ children }) => {
+    const { barbershopId } = useBarbershop()
+
     // State
-    const [services, setServices] = useState(initialServices)
-    const [barbers, setBarbers] = useState(initialBarbers)
-    const [customers, setCustomers] = useState(initialCustomers)
-    const [appointments, setAppointments] = useState(initialAppointments)
-    const [statistics, setStatistics] = useState(initialStatistics)
+    const [services, setServices] = useState([])
+    const [barbers, setBarbers] = useState([])
+    const [customers, setCustomers] = useState([])
+    const [appointments, setAppointments] = useState([])
+    const [statistics, setStatistics] = useState({ today: {}, week: {}, month: {} })
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(null)
 
-    // Services CRUD
-    const addService = (service) => {
-        const newService = {
-            ...service,
-            id: Math.max(...services.map(s => s.id), 0) + 1,
+    // Load initial data from Firebase
+    useEffect(() => {
+        if (!barbershopId) {
+            console.log('No barbershopId, skipping data load')
+            setLoading(false)
+            return
         }
-        setServices([...services, newService])
-        return newService
-    }
 
-    const updateService = (id, updates) => {
-        setServices(services.map(s => s.id === id ? { ...s, ...updates } : s))
-    }
+        const loadData = async () => {
+            try {
+                console.log('Loading data for barbershop:', barbershopId)
+                setLoading(true)
+                setError(null)
 
-    const deleteService = (id) => {
-        setServices(services.filter(s => s.id !== id))
-    }
-
-    // Barbers CRUD
-    const addBarber = (barber) => {
-        const newBarber = {
-            ...barber,
-            id: Math.max(...barbers.map(b => b.id), 0) + 1,
-        }
-        setBarbers([...barbers, newBarber])
-        return newBarber
-    }
-
-    const updateBarber = (id, updates) => {
-        setBarbers(barbers.map(b => b.id === id ? { ...b, ...updates } : b))
-    }
-
-    const deleteBarber = (id) => {
-        setBarbers(barbers.filter(b => b.id !== id))
-    }
-
-    // Customers CRUD
-    const addCustomer = (customer) => {
-        const newCustomer = {
-            ...customer,
-            id: Math.max(...customers.map(c => c.id), 0) + 1,
-            registeredAt: new Date().toISOString().split('T')[0],
-            totalSpent: 0,
-            loyaltyPoints: 0,
-            tier: 'Bronze',
-            visits: 0,
-        }
-        setCustomers([...customers, newCustomer])
-        return newCustomer
-    }
-
-    const updateCustomer = (id, updates) => {
-        setCustomers(customers.map(c => c.id === id ? { ...c, ...updates } : c))
-    }
-
-    const deleteCustomer = (id) => {
-        setCustomers(customers.filter(c => c.id !== id))
-    }
-
-    // Appointments CRUD
-    const addAppointment = (appointment) => {
-        const newAppointment = {
-            ...appointment,
-            id: Math.max(...appointments.map(a => a.id), 0) + 1,
-            createdAt: new Date().toISOString().split('T')[0],
-            status: appointment.status || 'pending',
-        }
-        setAppointments([...appointments, newAppointment])
-
-        // Update customer if exists
-        if (appointment.customerId) {
-            const customer = customers.find(c => c.id === appointment.customerId)
-            if (customer) {
-                const service = services.find(s => s.id === appointment.serviceId)
-                if (service) {
-                    updateCustomer(customer.id, {
-                        lastVisit: appointment.date,
-                        totalSpent: customer.totalSpent + service.price,
-                        loyaltyPoints: customer.loyaltyPoints + Math.floor(service.price * loyaltyConfig.pointsPerReal),
-                        visits: customer.visits + 1,
+                // Load all data in parallel
+                const [servicesData, barbersData, customersData, appointmentsData] = await Promise.all([
+                    servicesService.getAll(barbershopId).catch(err => {
+                        console.error('Error loading services:', err)
+                        return []
+                    }),
+                    barbersService.getAll(barbershopId).catch(err => {
+                        console.error('Error loading barbers:', err)
+                        return []
+                    }),
+                    customersService.getAll(barbershopId).catch(err => {
+                        console.error('Error loading customers:', err)
+                        return []
+                    }),
+                    appointmentsService.getAll(barbershopId).catch(err => {
+                        console.error('Error loading appointments:', err)
+                        return []
                     })
-                }
+                ])
+
+                console.log('Data loaded:', {
+                    services: servicesData.length,
+                    barbers: barbersData.length,
+                    customers: customersData.length,
+                    appointments: appointmentsData.length
+                })
+
+                setServices(servicesData)
+                setBarbers(barbersData)
+                setCustomers(customersData)
+                setAppointments(appointmentsData)
+
+                // Calculate statistics
+                calculateStatistics(appointmentsData, servicesData)
+            } catch (err) {
+                console.error('Error loading data:', err)
+                setError(err.message)
+            } finally {
+                setLoading(false)
             }
         }
 
-        return newAppointment
+        loadData()
+    }, [barbershopId])
+
+    // Real-time listeners for appointments (most critical for live updates)
+    useEffect(() => {
+        if (!barbershopId) return
+
+        const unsubscribe = appointmentsService.subscribe(barbershopId, (updatedAppointments) => {
+            setAppointments(updatedAppointments)
+
+            // Recalculate statistics when appointments change
+            if (services.length > 0) {
+                calculateStatistics(updatedAppointments, services)
+            }
+        })
+
+        return unsubscribe
+    }, [barbershopId, services])
+
+    // Calculate statistics helper
+    const calculateStatistics = (appointmentsData, servicesData) => {
+        const today = new Date().toISOString().split('T')[0]
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+        const getStats = (startDate, endDate = today) => {
+            const filtered = appointmentsData.filter(apt => {
+                const aptDate = apt.date
+                return aptDate >= startDate && aptDate <= endDate && apt.status !== 'cancelled'
+            })
+
+            const revenue = filtered.reduce((sum, apt) => {
+                const service = servicesData.find(s => s.id === apt.serviceId)
+                return sum + (service?.price || 0)
+            }, 0)
+
+            return {
+                appointments: filtered.length,
+                revenue,
+                newCustomers: 0 // Would need to track this separately
+            }
+        }
+
+        setStatistics({
+            today: getStats(today),
+            week: getStats(weekAgo),
+            month: getStats(monthAgo)
+        })
     }
 
-    const updateAppointment = (id, updates) => {
-        setAppointments(appointments.map(a => a.id === id ? { ...a, ...updates } : a))
+    // ==================== SERVICES CRUD ====================
+
+    const addService = async (service) => {
+        try {
+            const newService = await servicesService.add(barbershopId, service)
+            setServices([...services, newService])
+            return newService
+        } catch (err) {
+            console.error('Error adding service:', err)
+            throw err
+        }
     }
 
-    const deleteAppointment = (id) => {
-        setAppointments(appointments.filter(a => a.id !== id))
+    const updateService = async (id, updates) => {
+        try {
+            await servicesService.update(barbershopId, id, updates)
+            setServices(services.map(s => s.id === id ? { ...s, ...updates } : s))
+        } catch (err) {
+            console.error('Error updating service:', err)
+            throw err
+        }
     }
 
-    const cancelAppointment = (id) => {
-        updateAppointment(id, { status: 'cancelled' })
+    const deleteService = async (id) => {
+        try {
+            await servicesService.delete(barbershopId, id)
+            setServices(services.filter(s => s.id !== id))
+        } catch (err) {
+            console.error('Error deleting service:', err)
+            throw err
+        }
     }
 
-    const confirmAppointment = (id) => {
-        updateAppointment(id, { status: 'confirmed' })
+    // ==================== BARBERS CRUD ====================
+
+    const addBarber = async (barber) => {
+        try {
+            const newBarber = await barbersService.add(barbershopId, barber)
+            setBarbers([...barbers, newBarber])
+            return newBarber
+        } catch (err) {
+            console.error('Error adding barber:', err)
+            throw err
+        }
     }
 
-    const completeAppointment = (id) => {
-        updateAppointment(id, { status: 'completed' })
+    const updateBarber = async (id, updates) => {
+        try {
+            await barbersService.update(barbershopId, id, updates)
+            setBarbers(barbers.map(b => b.id === id ? { ...b, ...updates } : b))
+        } catch (err) {
+            console.error('Error updating barber:', err)
+            throw err
+        }
     }
 
-    // Helper functions
+    const deleteBarber = async (id) => {
+        try {
+            await barbersService.delete(barbershopId, id)
+            setBarbers(barbers.filter(b => b.id !== id))
+        } catch (err) {
+            console.error('Error deleting barber:', err)
+            throw err
+        }
+    }
+
+    // ==================== CUSTOMERS CRUD ====================
+
+    const addCustomer = async (customer) => {
+        try {
+            // Check if customer already exists by phone
+            const existing = await customersService.findByPhone(barbershopId, customer.phone)
+            if (existing) {
+                return existing
+            }
+
+            const newCustomer = await customersService.add(barbershopId, customer)
+            setCustomers([...customers, newCustomer])
+            return newCustomer
+        } catch (err) {
+            console.error('Error adding customer:', err)
+            throw err
+        }
+    }
+
+    const updateCustomer = async (id, updates) => {
+        try {
+            await customersService.update(barbershopId, id, updates)
+            setCustomers(customers.map(c => c.id === id ? { ...c, ...updates } : c))
+        } catch (err) {
+            console.error('Error updating customer:', err)
+            throw err
+        }
+    }
+
+    const deleteCustomer = async (id) => {
+        try {
+            await customersService.delete(barbershopId, id)
+            setCustomers(customers.filter(c => c.id !== id))
+        } catch (err) {
+            console.error('Error deleting customer:', err)
+            throw err
+        }
+    }
+
+    // ==================== APPOINTMENTS CRUD ====================
+
+    const addAppointment = async (appointment) => {
+        try {
+            const newAppointment = await appointmentsService.add(barbershopId, appointment)
+
+            // Update customer stats if they exist
+            if (appointment.customerId) {
+                const customer = customers.find(c => c.id === appointment.customerId)
+                if (customer) {
+                    const service = services.find(s => s.id === appointment.serviceId)
+                    if (service) {
+                        await updateCustomer(customer.id, {
+                            lastVisit: appointment.date,
+                            totalSpent: customer.totalSpent + service.price,
+                            loyaltyPoints: customer.loyaltyPoints + Math.floor(service.price * loyaltyConfig.pointsPerReal),
+                            visits: customer.visits + 1,
+                        })
+                    }
+                }
+            }
+
+            // Real-time listener will update state automatically
+            return newAppointment
+        } catch (err) {
+            console.error('Error adding appointment:', err)
+            throw err
+        }
+    }
+
+    const updateAppointment = async (id, updates) => {
+        try {
+            await appointmentsService.update(barbershopId, id, updates)
+            // Real-time listener will update state automatically
+        } catch (err) {
+            console.error('Error updating appointment:', err)
+            throw err
+        }
+    }
+
+    const deleteAppointment = async (id) => {
+        try {
+            await appointmentsService.delete(barbershopId, id)
+            // Real-time listener will update state automatically
+        } catch (err) {
+            console.error('Error deleting appointment:', err)
+            throw err
+        }
+    }
+
+    const cancelAppointment = (id) => updateAppointment(id, { status: 'cancelled' })
+    const confirmAppointment = (id) => updateAppointment(id, { status: 'confirmed' })
+    const completeAppointment = (id) => updateAppointment(id, { status: 'completed' })
+
+    // ==================== HELPER FUNCTIONS ====================
+
     const getServiceById = (id) => services.find(s => s.id === id)
     const getBarberById = (id) => barbers.find(b => b.id === id)
     const getCustomerById = (id) => customers.find(c => c.id === id)
@@ -155,8 +317,9 @@ export const AppProvider = ({ children }) => {
     const getActiveBarbers = () => barbers.filter(b => b.active)
     const getActiveServices = () => services.filter(s => s.active)
 
-    // Loyalty Program Functions
-    const completeService = (appointmentId) => {
+    // ==================== LOYALTY PROGRAM ====================
+
+    const completeService = async (appointmentId) => {
         const apt = appointments.find(a => a.id === appointmentId)
         if (!apt) return null
 
@@ -164,7 +327,7 @@ export const AppProvider = ({ children }) => {
         if (!customer) return null
 
         // Update appointment status
-        updateAppointment(appointmentId, { status: 'completed' })
+        await updateAppointment(appointmentId, { status: 'completed' })
 
         // Increment loyalty cuts
         const newCuts = (customer.loyaltyCuts || 0) + 1
@@ -172,35 +335,46 @@ export const AppProvider = ({ children }) => {
 
         if (newCuts >= 10) {
             // Ganhou corte grátis!
-            updateCustomer(customer.id, {
-                loyaltyCuts: 0,  // Reseta contador
+            await updateCustomer(customer.id, {
+                loyaltyCuts: 0,  // Reset counter
                 freeCutsAvailable: (customer.freeCutsAvailable || 0) + 1,
                 totalCutsCompleted: newTotalCompleted,
                 lastVisit: apt.date,
             })
-            return { reward: true, customer: { ...customer, loyaltyCuts: 0, freeCutsAvailable: (customer.freeCutsAvailable || 0) + 1 } }
+            return {
+                reward: true,
+                customer: {
+                    ...customer,
+                    loyaltyCuts: 0,
+                    freeCutsAvailable: (customer.freeCutsAvailable || 0) + 1
+                }
+            }
         } else {
-            updateCustomer(customer.id, {
+            await updateCustomer(customer.id, {
                 loyaltyCuts: newCuts,
                 totalCutsCompleted: newTotalCompleted,
                 lastVisit: apt.date,
             })
-            return { reward: false, customer: { ...customer, loyaltyCuts: newCuts }, progress: newCuts }
+            return {
+                reward: false,
+                customer: { ...customer, loyaltyCuts: newCuts },
+                progress: newCuts
+            }
         }
     }
 
-    const redeemFreeCut = (customerId, appointmentId) => {
+    const redeemFreeCut = async (customerId, appointmentId) => {
         const customer = customers.find(c => c.id === customerId)
         if (!customer || customer.freeCutsAvailable <= 0) return false
 
         // Decrement free cuts
-        updateCustomer(customerId, {
+        await updateCustomer(customerId, {
             freeCutsAvailable: customer.freeCutsAvailable - 1,
         })
 
         // Mark appointment as completed without incrementing cuts
         if (appointmentId) {
-            updateAppointment(appointmentId, {
+            await updateAppointment(appointmentId, {
                 status: 'completed',
                 redeemed: true  // Flag to identify this was a free cut
             })
@@ -218,6 +392,8 @@ export const AppProvider = ({ children }) => {
         appointments,
         statistics,
         loyaltyConfig,
+        loading,
+        error,
 
         // Services
         addService,

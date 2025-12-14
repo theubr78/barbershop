@@ -9,7 +9,8 @@ const BookingConfirmation = () => {
     const { id } = useParams()
     const { getAppointmentById, getServiceById, getBarberById, getCustomerById } = useApp()
 
-    const appointment = getAppointmentById(parseInt(id))
+    // Firebase IDs are strings, no need to parseInt
+    const appointment = getAppointmentById(id)
     const service = appointment ? getServiceById(appointment.serviceId) : null
     const barber = appointment ? getBarberById(appointment.barberId) : null
     const customer = appointment ? getCustomerById(appointment.customerId) : null

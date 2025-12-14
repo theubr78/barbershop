@@ -50,7 +50,7 @@ const BookingFlow = () => {
         return slots.filter(slot => isSlotAvailable(slot, appointments, selectedBarber.id, selectedDate))
     }
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (step === 4) {
             // Validate customer data
             const newErrors = {}
@@ -69,18 +69,23 @@ const BookingFlow = () => {
                 return
             }
 
-            // Create booking
-            const customer = addCustomer(customerData)
-            const appointment = addAppointment({
-                customerId: customer.id,
-                barberId: selectedBarber.id,
-                serviceId: selectedService.id,
-                date: selectedDate,
-                time: selectedTime,
-                status: 'pending',
-            })
+            try {
+                // Create customer and appointment (both are async!)
+                const customer = await addCustomer(customerData)
+                const appointment = await addAppointment({
+                    customerId: customer.id,
+                    barberId: selectedBarber.id,
+                    serviceId: selectedService.id,
+                    date: selectedDate,
+                    time: selectedTime,
+                    status: 'pending',
+                })
 
-            navigate(`/confirmacao/${appointment.id}`)
+                navigate(`/confirmacao/${appointment.id}`)
+            } catch (error) {
+                console.error('Error creating booking:', error)
+                setErrors({ general: 'Erro ao criar agendamento. Tente novamente.' })
+            }
         } else {
             setStep(step + 1)
         }
@@ -127,8 +132,8 @@ const BookingFlow = () => {
                                 <div className="flex flex-col items-center flex-1">
                                     <div
                                         className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${step >= s.number
-                                                ? 'border-accent-purple bg-accent-purple text-white'
-                                                : 'border-white/20 text-white/40'
+                                            ? 'border-accent-purple bg-accent-purple text-white'
+                                            : 'border-white/20 text-white/40'
                                             }`}
                                     >
                                         {step > s.number ? <Check size={20} /> : <s.icon size={20} />}
@@ -153,8 +158,8 @@ const BookingFlow = () => {
                                 key={service.id}
                                 hover
                                 className={`cursor-pointer transition-all ${selectedService?.id === service.id
-                                        ? 'border-accent-purple border-2 shadow-glow'
-                                        : ''
+                                    ? 'border-accent-purple border-2 shadow-glow'
+                                    : ''
                                     }`}
                                 onClick={() => setSelectedService(service)}
                             >
@@ -191,8 +196,8 @@ const BookingFlow = () => {
                                 key={barber.id}
                                 hover
                                 className={`cursor-pointer text-center transition-all ${selectedBarber?.id === barber.id
-                                        ? 'border-accent-purple border-2 shadow-glow'
-                                        : ''
+                                    ? 'border-accent-purple border-2 shadow-glow'
+                                    : ''
                                     }`}
                                 onClick={() => setSelectedBarber(barber)}
                             >
@@ -241,8 +246,8 @@ const BookingFlow = () => {
                                                 setSelectedTime('')
                                             }}
                                             className={`p-3 rounded-lg border transition-all ${selectedDate === date
-                                                    ? 'border-accent-purple bg-accent-purple/20 text-white'
-                                                    : 'border-white/20 text-white/70 hover:border-white/40'
+                                                ? 'border-accent-purple bg-accent-purple/20 text-white'
+                                                : 'border-white/20 text-white/70 hover:border-white/40'
                                                 }`}
                                         >
                                             <div className="text-xs opacity-70">{month}</div>
@@ -262,8 +267,8 @@ const BookingFlow = () => {
                                             key={time}
                                             onClick={() => setSelectedTime(time)}
                                             className={`p-3 rounded-lg border transition-all ${selectedTime === time
-                                                    ? 'border-accent-purple bg-accent-purple/20 text-white'
-                                                    : 'border-white/20 text-white/70 hover:border-white/40'
+                                                ? 'border-accent-purple bg-accent-purple/20 text-white'
+                                                : 'border-white/20 text-white/70 hover:border-white/40'
                                                 }`}
                                         >
                                             {time}
