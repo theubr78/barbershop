@@ -21,6 +21,7 @@ const BookingFlow = () => {
         phone: '',
     })
     const [errors, setErrors] = useState({})
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     // Load from LocalStorage on mount
     useEffect(() => {
@@ -80,6 +81,8 @@ const BookingFlow = () => {
 
     const handleNext = async () => {
         if (step === 4) {
+            if (isSubmitting) return
+
             // Validate customer data
             const newErrors = {}
             if (!validateName(customerData.name)) {
@@ -93,6 +96,8 @@ const BookingFlow = () => {
                 setErrors(newErrors)
                 return
             }
+
+            setIsSubmitting(true)
 
             try {
                 // Save to LocalStorage
@@ -116,6 +121,8 @@ const BookingFlow = () => {
             } catch (error) {
                 console.error('Error creating booking:', error)
                 setErrors({ general: 'Erro ao criar agendamento. Tente novamente.' })
+            } finally {
+                setIsSubmitting(false)
             }
         } else {
             setStep(step + 1)
@@ -375,12 +382,14 @@ const BookingFlow = () => {
                 <div className="flex justify-end gap-4 mt-8">
                     <Button
                         onClick={handleNext}
-                        disabled={!canProceed()}
+                        disabled={!canProceed() || isSubmitting}
                         size="lg"
                         icon={step === 4 ? <Check size={20} /> : <ArrowRight size={20} />}
                         iconPosition="right"
                     >
-                        {step === 4 ? 'Confirmar Agendamento' : 'Próximo'}
+                        {step === 4
+                            ? (isSubmitting ? 'Agendando...' : 'Confirmar Agendamento')
+                            : 'Próximo'}
                     </Button>
                 </div>
             </div>

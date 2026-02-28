@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { useBarbershop } from './BarbershopContext'
 import {
     servicesService,
@@ -94,6 +94,10 @@ export const AppProvider = ({ children }) => {
         loadData()
     }, [barbershopId])
 
+    // Keep a ref to services for use inside the listener without causing re-subscriptions
+    const servicesRef = useRef(services)
+    useEffect(() => { servicesRef.current = services }, [services])
+
     // Real-time listeners for appointments (most critical for live updates)
     useEffect(() => {
         if (!barbershopId) return
@@ -102,13 +106,13 @@ export const AppProvider = ({ children }) => {
             setAppointments(updatedAppointments)
 
             // Recalculate statistics when appointments change
-            if (services.length > 0) {
-                calculateStatistics(updatedAppointments, services)
+            if (servicesRef.current.length > 0) {
+                calculateStatistics(updatedAppointments, servicesRef.current)
             }
         })
 
         return unsubscribe
-    }, [barbershopId, services])
+    }, [barbershopId])
 
     // Calculate statistics helper
     const calculateStatistics = (appointmentsData, servicesData) => {
