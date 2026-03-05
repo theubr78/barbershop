@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, Scissors, User, Calendar, Clock, Phone } from 'lucide-react'
 import { useApp } from '../../contexts/AppContext'
@@ -22,6 +22,11 @@ const BookingFlow = () => {
     })
     const [errors, setErrors] = useState({})
     const [isSubmitting, setIsSubmitting] = useState(false)
+
+    // Synchronous guard — blocks double-taps faster than useState
+    const submittingRef = useRef(false)
+    // Stable booking ID — ensures idempotent writes to Firestore
+    const bookingIdRef = useRef(null)
 
     // Load from LocalStorage on mount
     useEffect(() => {
@@ -81,7 +86,10 @@ const BookingFlow = () => {
 
     const handleNext = async () => {
         if (step === 4) {
-            if (isSubmitting) return
+            // Synchronous guard — blocks before React re-renders
+            if (submittingRef.current) return
+            submittingRef.current = true
+            setIsSubmitting(true)
 
             // Validate customer data
             const newErrors = {}
@@ -94,10 +102,15 @@ const BookingFlow = () => {
 
             if (Object.keys(newErrors).length > 0) {
                 setErrors(newErrors)
+                setIsSubmitting(false)
+                submittingRef.current = false
                 return
             }
 
-            setIsSubmitting(true)
+            // Generate a stable booking ID (persists across retries)
+            if (!bookingIdRef.current) {
+                bookingIdRef.current = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            }
 
             try {
                 // Save to LocalStorage
@@ -106,9 +119,10 @@ const BookingFlow = () => {
                     phone: customerData.phone
                 }))
 
-                // Create customer and appointment (both are async!)
+                // Create customer and appointment
                 const customer = await addCustomer(customerData)
                 const appointment = await addAppointment({
+                    _clientId: bookingIdRef.current,
                     customerId: customer.id,
                     barberId: selectedBarber.id,
                     serviceId: selectedService.id,
@@ -121,8 +135,10 @@ const BookingFlow = () => {
             } catch (error) {
                 console.error('Error creating booking:', error)
                 setErrors({ general: 'Erro ao criar agendamento. Tente novamente.' })
+                // Keep bookingIdRef so retries overwrite the same doc
             } finally {
                 setIsSubmitting(false)
+                submittingRef.current = false
             }
         } else {
             setStep(step + 1)

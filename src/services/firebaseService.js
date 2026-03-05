@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { firebaseConfig } from '../config/firebase'
 
@@ -211,11 +211,21 @@ export const appointmentsService = {
 
     async add(barbershopId, appointment) {
         const appointmentsRef = getCollectionRef(barbershopId, 'appointments')
+        const { _clientId, ...cleanAppointment } = appointment
         const appointmentData = {
-            ...appointment,
+            ...cleanAppointment,
             createdAt: new Date().toISOString().split('T')[0],
-            status: appointment.status || 'pending'
+            status: cleanAppointment.status || 'pending'
         }
+
+        if (_clientId) {
+            // Idempotent write: same _clientId always writes to same document
+            const docRef = doc(appointmentsRef, _clientId)
+            await setDoc(docRef, appointmentData)
+            return { id: _clientId, ...appointmentData }
+        }
+
+        // Fallback: auto-generated ID (backward compatible)
         const docRef = await addDoc(appointmentsRef, appointmentData)
         return { id: docRef.id, ...appointmentData }
     },
