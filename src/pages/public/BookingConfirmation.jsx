@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useLocation } from 'react-router-dom'
 import { CheckCircle, Calendar, User, Scissors, Clock, ArrowLeft, MessageCircle } from 'lucide-react'
 import { useApp } from '../../contexts/AppContext'
 import Card from '../../components/ui/Card'
@@ -7,13 +7,16 @@ import { formatCurrency, formatDate, generateWhatsAppLink } from '../../utils/he
 
 const BookingConfirmation = () => {
     const { id } = useParams()
+    const location = useLocation()
     const { getAppointmentById, getServiceById, getBarberById, getCustomerById } = useApp()
 
-    // Firebase IDs are strings, no need to parseInt
-    const appointment = getAppointmentById(id)
-    const service = appointment ? getServiceById(appointment.serviceId) : null
-    const barber = appointment ? getBarberById(appointment.barberId) : null
-    const customer = appointment ? getCustomerById(appointment.customerId) : null
+    // Primary: data passed via navigation state (works for non-admin users)
+    // Fallback: lookup from AppContext (works for admin users)
+    const bookingData = location.state
+    const appointment = bookingData?.appointment || getAppointmentById(id)
+    const service = bookingData?.service || (appointment ? getServiceById(appointment.serviceId) : null)
+    const barber = bookingData?.barber || (appointment ? getBarberById(appointment.barberId) : null)
+    const customer = bookingData?.customer || (appointment ? getCustomerById(appointment.customerId) : null)
 
     if (!appointment || !service || !barber) {
         return (
@@ -58,7 +61,9 @@ const BookingConfirmation = () => {
                             <div className="flex-1">
                                 <p className="text-sm text-white/60 mb-1">Serviço</p>
                                 <p className="text-lg font-semibold text-white">{service.name}</p>
-                                <p className="text-sm text-white/60">{service.description}</p>
+                                {service.description && (
+                                    <p className="text-sm text-white/60">{service.description}</p>
+                                )}
                             </div>
                             <div className="text-right">
                                 <p className="text-lg font-bold text-accent-purple">
@@ -79,22 +84,26 @@ const BookingConfirmation = () => {
                             <div className="flex-1">
                                 <p className="text-sm text-white/60 mb-1">Profissional</p>
                                 <p className="text-lg font-semibold text-white">{barber.name}</p>
-                                <div className="flex gap-2 mt-1">
-                                    {barber.specialties.slice(0, 2).map((specialty, index) => (
-                                        <span
-                                            key={index}
-                                            className="px-2 py-0.5 rounded text-xs bg-accent-purple/20 text-accent-purple"
-                                        >
-                                            {specialty}
-                                        </span>
-                                    ))}
-                                </div>
+                                {barber.specialties && (
+                                    <div className="flex gap-2 mt-1">
+                                        {barber.specialties.slice(0, 2).map((specialty, index) => (
+                                            <span
+                                                key={index}
+                                                className="px-2 py-0.5 rounded text-xs bg-accent-purple/20 text-accent-purple"
+                                            >
+                                                {specialty}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                            <img
-                                src={barber.photo}
-                                alt={barber.name}
-                                className="w-16 h-16 rounded-full border-2 border-accent-purple object-cover"
-                            />
+                            {barber.photo && (
+                                <img
+                                    src={barber.photo}
+                                    alt={barber.name}
+                                    className="w-16 h-16 rounded-full border-2 border-accent-purple object-cover"
+                                />
+                            )}
                         </div>
 
                         {/* Date & Time */}

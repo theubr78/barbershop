@@ -5,7 +5,7 @@ import { useApp } from '../../contexts/AppContext'
 import Card from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
-import { formatCurrency, validatePhone, validateName, generateTimeSlots, isSlotAvailable } from '../../utils/helpers'
+import { formatCurrency, validatePhone, validateName, generateTimeSlots, isSlotAvailable, formatDate, generateWhatsAppLink } from '../../utils/helpers'
 
 const BookingFlow = () => {
     const navigate = useNavigate()
@@ -131,7 +131,23 @@ const BookingFlow = () => {
                     status: 'pending',
                 })
 
-                navigate(`/confirmacao/${appointment.id}`)
+                navigate(`/confirmacao/${appointment.id}`, {
+                    state: {
+                        appointment: { id: appointment.id, date: selectedDate, time: selectedTime, status: 'pending' },
+                        service: { name: selectedService.name, price: selectedService.price, duration: selectedService.duration, description: selectedService.description },
+                        barber: { name: selectedBarber.name, photo: selectedBarber.photo, specialties: selectedBarber.specialties },
+                        customer: { name: customerData.name, phone: customerData.phone },
+                    }
+                })
+
+                // Auto-redirect to WhatsApp
+                const whatsappMessage = `Olá! Acabei de agendar um horário:\n\n📅 Data: ${formatDate(selectedDate)}\n⏰ Horário: ${selectedTime}\n✂️ Serviço: ${selectedService.name}\n💰 Valor: ${formatCurrency(selectedService.price)}\n\nNome: ${customerData.name}\nTelefone: ${customerData.phone}\n\nAguardo confirmação!`
+                const whatsappUrl = generateWhatsAppLink('71992139485', whatsappMessage)
+
+                // Small delay to let navigate complete, then open WhatsApp
+                setTimeout(() => {
+                    window.open(whatsappUrl, '_blank')
+                }, 300)
             } catch (error) {
                 console.error('Error creating booking:', error)
                 setErrors({ general: 'Erro ao criar agendamento. Tente novamente.' })
