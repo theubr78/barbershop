@@ -24,7 +24,7 @@ const mockBarbers = [
             tuesday: { start: '09:00', end: '18:00' },
             wednesday: { start: '09:00', end: '18:00' },
             thursday: { start: '09:00', end: '18:00' },
-            friday: { start: '09:00', end: '18:00' },
+            friday: { start: '07:30', end: '13:00' },
             saturday: { start: '09:00', end: '18:00' },
             sunday: { start: '09:00', end: '18:00' }
         },
