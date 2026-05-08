@@ -75,12 +75,6 @@ export const AppProvider = ({ children }) => {
                 setBarbers(barbersData.map(b => {
                     // Clone objects to avoid mutation issues
                     const newBarber = { ...b }
-                    if (newBarber.schedule && newBarber.schedule.friday) {
-                        newBarber.schedule = {
-                            ...newBarber.schedule,
-                            friday: { start: '07:30', end: '13:00' }
-                        }
-                    }
                     if (newBarber.name === 'Samuel Rodrigues') {
                         newBarber.photo = '/barbers/samuel.jpeg'
                     }
