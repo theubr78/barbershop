@@ -115,7 +115,7 @@ export const barbers = [
             tuesday: { start: '09:00', end: '19:00' },
             wednesday: { start: '09:00', end: '19:00' },
             thursday: { start: '09:00', end: '19:00' },
-            friday: { start: '07:30', end: '13:00' },
+            friday: { start: '07:30', end: '19:00' },
             saturday: { start: '08:00', end: '18:00' },
             sunday: { start: '08:30', end: '12:00' },
         },
